@@ -297,15 +297,32 @@ if prompt_to_send:
                     f"5. Đưa ra nhận xét insights súc tích, làm rõ xu hướng, điểm đột biến hoặc tương quan quan trọng."
                 )
 
-                response = client.models.generate_content(
-                    model="gemini-1.5-flash",
-                    contents=full_prompt,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        response_schema=ChartPayload,
-                        temperature=0.1,
-                    ),
-                )
+                import time
+
+                # Danh sách model theo thứ tự ưu tiên (nếu model đầu quá tải thì tự chuyển model tiếp theo)
+                candidate_models = ["gemini-3.8-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+                response = None
+                last_error = None
+                
+                for m in candidate_models:
+                    try:
+                        response = client.models.generate_content(
+                            model=m,
+                            contents=full_prompt,
+                            config=types.GenerateContentConfig(
+                                response_mime_type="application/json",
+                                response_schema=ChartPayload,
+                                temperature=0.1,
+                            ),
+                        )
+                        break  # Gọi thành công thì thoát vòng lặp
+                    except Exception as err:
+                        last_error = err
+                        # Nếu bị lỗi 503 hoặc quá tải, đợi 2 giây rồi thử model tiếp theo
+                        time.sleep(2)
+                
+                if response is None:
+                    raise last_error
 
                 chart_data = json.loads(response.text)
                 payload_obj = ChartPayload(**chart_data)
